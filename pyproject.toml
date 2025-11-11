@@ -1,0 +1,14 @@
+[build-system]
+requires = ["setuptools>=45", "setuptools-scm[toml]>=6.2"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "search-manager"
+version = "0.1.0"
+dependencies = [
+    "requests>=2.31.0",
+    "pyyaml>=6.0",
+]
+
+[project.scripts]
+search = "search_manager.cli:main"
