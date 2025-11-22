@@ -6,6 +6,8 @@ import requests
 import yaml
 from . import functions
 
+VERSION = "0.1.0"
+
 def load_config():
     config_path = Path.home() / ".starsearch" / "config.json"
     with open(config_path) as f:
@@ -121,6 +123,10 @@ def query(endpoint, target=None):
         print(response.text)
 
 def main():
+    if len(sys.argv) > 1 and sys.argv[1] in ["-v", "--version"]:
+        print(f"observe-cli version {VERSION}")
+        sys.exit(0)
+    
     if len(sys.argv) < 2 or sys.argv[1] in ["-h", "--help"]:
         print("Usage: observe-cli <command> [args] or observe-cli <endpoint>")
         print("       observe-cli -t|--target <name> <command> [args]")
