@@ -12,12 +12,31 @@ def load_config():
         return json.load(f)
 
 def get_server(config, target=None):
+    """Get server configuration by name or return the default (first) server.
+    
+    Args:
+        config: Configuration dictionary containing 'servers' list
+        target: Optional server name to look up
+        
+    Returns:
+        tuple: (server_dict, is_default_bool)
+        
+    Raises:
+        SystemExit: If target server is not found (prints available servers and exits)
+    """
     servers = config["servers"]
     if target:
         for srv in servers:
             if srv["name"] == target:
                 return srv, False
-        raise ValueError(f"Server '{target}' not found in config")
+        
+        # Target not found - show helpful error message
+        print(f"Error: Server '{target}' not found in configuration", file=sys.stderr)
+        print(f"\nAvailable servers:", file=sys.stderr)
+        for srv in servers:
+            print(f"  - {srv['name']}", file=sys.stderr)
+        sys.exit(1)
+    
     return servers[0], True  # default server, is_default=True
 
 def get_auth(server):
@@ -88,21 +107,23 @@ def query(endpoint, target=None):
 
 def main():
     if len(sys.argv) < 2 or sys.argv[1] in ["-h", "--help"]:
-        print("Usage: search <command> [args] or search <endpoint>")
-        print("       search -t|--target <name> <command> [args]")
+        print("Usage: observe-cli <command> [args] or observe-cli <endpoint>")
+        print("       observe-cli -t|--target <name> <command> [args]")
         print("\nCustom commands:")
-        print("  search ilm info [--all]                         - Show ILM policy info for indices (--all includes unmanaged)")
-        print("  search ilm <policy> set delete-after <days>     - Set delete phase for a policy")
-        print("  search ilm <policy> set warm-after <days>       - Set warm phase for a policy")
-        print("  search ilm <policy> set cold-after <days>       - Set cold phase for a policy")
-        print("  search ilm <policy> set rollover <size> <docs>  - Set rollover thresholds (use 'none' to skip)")
-        print("  search index delete <index-name>                - Delete an index")
-        print("  search index-pattern list                       - List all index patterns with IDs")
-        print("  search index-pattern delete <pattern-id>        - Delete an index pattern")
-        print("  search dashboard list                           - List all dashboards and visualizations")
-        print("  search dashboard delete <id>                    - Delete a dashboard or visualization")
-        print("  search dashboard export [id1 id2 ...]           - Export dashboards/visualizations to ndjson")
-        print("  search dashboard import <file.ndjson>           - Import dashboards/visualizations from ndjson")
+        print("  observe-cli ilm info [--all]                         - Show ILM policy info for indices (--all includes unmanaged)")
+        print("  observe-cli ilm <policy> set delete-after <days>     - Set delete phase for a policy")
+        print("  observe-cli ilm <policy> set warm-after <days>       - Set warm phase for a policy")
+        print("  observe-cli ilm <policy> set cold-after <days>       - Set cold phase for a policy")
+        print("  observe-cli ilm <policy> set rollover <size> <docs>  - Set rollover thresholds (use 'none' to skip)")
+        print("  observe-cli index delete <index-name>                - Delete an index")
+        print("  observe-cli index-pattern list                       - List all index patterns with IDs")
+        print("  observe-cli index-pattern delete <pattern-id>        - Delete an index pattern")
+        print("  observe-cli dashboard list                           - List all dashboards and visualizations")
+        print("  observe-cli dashboard delete <id>                    - Delete a dashboard or visualization")
+        print("  observe-cli dashboard export [id1 id2 ...]           - Export dashboards/visualizations/searches to ndjson")
+        print("  observe-cli dashboard import <file.ndjson>           - Import dashboards/visualizations/searches from ndjson")
+        print("  observe-cli search list                              - List all saved searches")
+        print("  observe-cli search delete <id>                       - Delete a saved search")
         sys.exit(0 if len(sys.argv) > 1 else 1)
     
     target = None
@@ -129,7 +150,7 @@ def main():
         # Handle rollover separately
         if phase_arg == "rollover":
             if len(args) < 6:
-                print("Usage: search ilm <policy> set rollover <max_size> <max_docs>")
+                print("Usage: observe-cli ilm <policy> set rollover <max_size> <max_docs>")
                 print("  max_size: e.g., '50gb', '10gb'")
                 print("  max_docs: e.g., '150000000' or 'none'")
                 sys.exit(1)
@@ -145,7 +166,7 @@ def main():
             print("Error: phase must be delete-after, warm-after, cold-after, or rollover")
             sys.exit(1)
         if len(args) < 5:
-            print(f"Usage: search ilm <policy> set {phase_arg} <days>")
+            print(f"Usage: observe-cli ilm <policy> set {phase_arg} <days>")
             sys.exit(1)
         cfg = load_config()
         policy_name = args[1]
@@ -167,7 +188,7 @@ def main():
     
     if len(args) >= 3 and args[0] == "index" and args[1] == "delete":
         if len(args) < 3:
-            print("Usage: search index delete <index-name>")
+            print("Usage: observe-cli index delete <index-name>")
             sys.exit(1)
         cfg = load_config()
         index_name = args[2]
@@ -186,7 +207,7 @@ def main():
     
     if len(args) >= 3 and args[0] == "index-pattern" and args[1] == "delete":
         if len(args) < 3:
-            print("Usage: search index-pattern delete <pattern-id>")
+            print("Usage: observe-cli index-pattern delete <pattern-id>")
             sys.exit(1)
         cfg = load_config()
         pattern_id = args[2]
@@ -203,9 +224,28 @@ def main():
             functions.print_saved_objects(results)
         return
     
+    if len(args) >= 2 and args[0] == "search" and args[1] == "list":
+        cfg = load_config()
+        results = functions.list_saved_searches(cfg, target)
+        if isinstance(results, dict) and "error" in results:
+            print(json.dumps(results, indent=2))
+        else:
+            functions.print_index_patterns(results)
+        return
+    
+    if len(args) >= 3 and args[0] == "search" and args[1] == "delete":
+        if len(args) < 3:
+            print("Usage: observe-cli search delete <id>")
+            sys.exit(1)
+        cfg = load_config()
+        search_id = args[2]
+        result = functions.delete_saved_search(cfg, search_id, target)
+        print(json.dumps(result, indent=2))
+        return
+    
     if len(args) >= 3 and args[0] == "dashboard" and args[1] == "delete":
         if len(args) < 3:
-            print("Usage: search dashboard delete <id>")
+            print("Usage: observe-cli dashboard delete <id>")
             sys.exit(1)
         cfg = load_config()
         obj_id = args[2]

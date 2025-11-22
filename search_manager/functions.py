@@ -269,8 +269,9 @@ def delete_index_pattern(config, pattern_id, target=None):
     verify_ssl = get_verify_ssl(server)
     
     if use_dashboards_api(server):
-        # Use OpenSearch Dashboards API
-        delete_resp = requests.delete(f"{base_url}/api/saved_objects/index-pattern/{pattern_id}", auth=auth, verify=verify_ssl)
+        # Use OpenSearch Dashboards API (requires osd-xsrf header for DELETE)
+        headers = {'osd-xsrf': 'true'}
+        delete_resp = requests.delete(f"{base_url}/api/saved_objects/index-pattern/{pattern_id}", auth=auth, verify=verify_ssl, headers=headers)
     else:
         # Use direct .kibana index access
         delete_resp = requests.delete(f"{base_url}/.kibana/_doc/index-pattern:{pattern_id}", auth=auth, verify=verify_ssl)
@@ -297,8 +298,9 @@ def delete_dashboard(config, obj_id, target=None):
     verify_ssl = get_verify_ssl(server)
     
     if use_dashboards_api(server):
-        # Use OpenSearch Dashboards API - try both types
-        delete_resp = requests.delete(f"{base_url}/api/saved_objects/dashboard/{obj_id}", auth=auth, verify=verify_ssl)
+        # Use OpenSearch Dashboards API - try both types (requires osd-xsrf header for DELETE)
+        headers = {'osd-xsrf': 'true'}
+        delete_resp = requests.delete(f"{base_url}/api/saved_objects/dashboard/{obj_id}", auth=auth, verify=verify_ssl, headers=headers)
         if delete_resp.status_code == 200:
             return {
                 "success": True,
@@ -306,7 +308,7 @@ def delete_dashboard(config, obj_id, target=None):
                 "message": f"Dashboard '{obj_id}' deleted successfully"
             }
         
-        delete_resp = requests.delete(f"{base_url}/api/saved_objects/visualization/{obj_id}", auth=auth, verify=verify_ssl)
+        delete_resp = requests.delete(f"{base_url}/api/saved_objects/visualization/{obj_id}", auth=auth, verify=verify_ssl, headers=headers)
         if delete_resp.status_code == 200:
             return {
                 "success": True,
@@ -634,8 +636,116 @@ def list_index_patterns(config, target=None):
     return results
 
 
+def list_saved_searches(config, target=None):
+    """List all saved searches from .kibana index or Dashboards API."""
+    from .cli import get_server, get_auth, get_verify_ssl, get_base_url, use_dashboards_api
+    
+    server, _ = get_server(config, target)
+    base_url = get_base_url(server)
+    auth = get_auth(server)
+    verify_ssl = get_verify_ssl(server)
+    
+    if use_dashboards_api(server):
+        # Use OpenSearch Dashboards API
+        url = f"{base_url}/api/saved_objects/_find?type=search&per_page=1000"
+        resp = requests.get(url, auth=auth, verify=verify_ssl)
+        if resp.status_code != 200:
+            return {"error": f"Failed to fetch saved searches: {resp.status_code}"}
+        
+        data = resp.json()
+        results = []
+        
+        for obj in data.get('saved_objects', []):
+            obj_id = obj['id']
+            attrs = obj.get('attributes', {})
+            title = attrs.get('title', 'N/A')
+            
+            results.append({
+                'id': obj_id,
+                'title': title
+            })
+    else:
+        # Use direct .kibana index access
+        url = f"{base_url}/.kibana/_search?size=1000"
+        resp = requests.get(url, auth=auth, verify=verify_ssl)
+        if resp.status_code != 200:
+            return {"error": f"Failed to fetch saved searches: {resp.status_code}"}
+        
+        data = resp.json()
+        results = []
+        
+        for hit in data['hits']['hits']:
+            source = hit['_source']
+            hit_type = source.get('type', 'unknown')
+            
+            if hit_type != 'search':
+                continue
+            
+            obj_data = source.get('search', {})
+            title = obj_data.get('title', 'N/A')
+            obj_id = hit['_id']
+            # Remove type prefix if present
+            if ':' in obj_id:
+                obj_id = obj_id.split(':', 1)[1]
+            
+            results.append({
+                'id': obj_id,
+                'title': title
+            })
+    
+    return results
+
+
+def delete_saved_search(config, search_id, target=None):
+    """Delete a saved search from .kibana or Dashboards API."""
+    from .cli import get_server, get_auth, get_verify_ssl, get_base_url, use_dashboards_api
+    
+    server, _ = get_server(config, target)
+    base_url = get_base_url(server)
+    auth = get_auth(server)
+    verify_ssl = get_verify_ssl(server)
+    
+    if use_dashboards_api(server):
+        # Use OpenSearch Dashboards API (requires osd-xsrf header for DELETE)
+        headers = {'osd-xsrf': 'true'}
+        delete_resp = requests.delete(f"{base_url}/api/saved_objects/search/{search_id}", auth=auth, verify=verify_ssl, headers=headers)
+        if delete_resp.status_code == 200:
+            return {
+                "success": True,
+                "id": search_id,
+                "message": f"Saved search '{search_id}' deleted successfully"
+            }
+        elif delete_resp.status_code == 404:
+            return {"error": f"Saved search '{search_id}' not found"}
+        else:
+            return {"error": delete_resp.text}
+    else:
+        # Use direct .kibana index access
+        # Try with search: prefix first
+        delete_resp = requests.delete(f"{base_url}/.kibana/_doc/search:{search_id}", auth=auth, verify=verify_ssl)
+        
+        if delete_resp.status_code == 200:
+            return {
+                "success": True,
+                "id": search_id,
+                "message": f"Saved search '{search_id}' deleted successfully"
+            }
+        elif delete_resp.status_code == 404:
+            # Try without prefix
+            delete_resp = requests.delete(f"{base_url}/.kibana/_doc/{search_id}", auth=auth, verify=verify_ssl)
+            if delete_resp.status_code == 200:
+                return {
+                    "success": True,
+                    "id": search_id,
+                    "message": f"Saved search '{search_id}' deleted successfully"
+                }
+            return {"error": f"Saved search '{search_id}' not found"}
+        else:
+            return {"error": delete_resp.text}
+
+
 def print_saved_objects(results):
-    """Print saved objects (dashboards/visualizations) as a table."""
+    """Print saved objects (dashboards/visualizations/searches) as a table."""
     if not results:
         print("No objects found")
         return
@@ -681,7 +791,7 @@ def print_index_patterns(results):
 
 
 def export_saved_objects(config, target=None, obj_ids=None, obj_type=None):
-    """Export saved objects (dashboards/visualizations) to ndjson format with index-pattern mapping."""
+    """Export saved objects (dashboards/visualizations/searches) to ndjson format with index-pattern mapping."""
     from .cli import get_server, get_auth, get_verify_ssl, get_base_url, use_dashboards_api
     
     server, _ = get_server(config, target)
@@ -706,7 +816,7 @@ def export_saved_objects(config, target=None, obj_ids=None, obj_type=None):
             if title:
                 index_pattern_map[obj_id] = title
         
-        url = f"{base_url}/api/saved_objects/_find?type=dashboard&type=visualization&per_page=1000"
+        url = f"{base_url}/api/saved_objects/_find?type=dashboard&type=visualization&type=search&per_page=1000"
         resp = requests.get(url, auth=auth, verify=verify_ssl)
         if resp.status_code != 200:
             return {"error": f"Failed to fetch saved objects: {resp.status_code}"}
@@ -779,7 +889,7 @@ def export_saved_objects(config, target=None, obj_ids=None, obj_type=None):
                 continue
             if obj_ids and obj_id not in obj_ids:
                 continue
-            if hit_type not in ['dashboard', 'visualization']:
+            if hit_type not in ['dashboard', 'visualization', 'search']:
                 continue
             
             obj = {
