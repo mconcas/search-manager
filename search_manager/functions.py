@@ -1,6 +1,11 @@
 import requests
 import json
+import sys
 from datetime import datetime, timedelta
+import urllib3
+
+# Disable SSL warnings when verify_ssl is False
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
 COLORS = {
@@ -33,13 +38,15 @@ def format_bytes(bytes_val):
 
 def set_policy_delete_phase(config, policy_name, days, target=None):
     """Add or update delete phase in an ILM policy."""
-    from .cli import get_server
+    from .cli import get_server, get_auth, get_verify_ssl, get_base_url
     
     server, _ = get_server(config, target)
-    base_url = f"{server['protocol']}://{server['host']}"
+    base_url = get_base_url(server)
+    auth = get_auth(server)
+    verify_ssl = get_verify_ssl(server)
     
     # Get current policy
-    policy_resp = requests.get(f"{base_url}/_ilm/policy/{policy_name}")
+    policy_resp = requests.get(f"{base_url}/_ilm/policy/{policy_name}", auth=auth, verify=verify_ssl)
     if policy_resp.status_code != 200:
         return {"error": f"Policy '{policy_name}' not found"}
     
@@ -79,13 +86,15 @@ def set_policy_delete_phase(config, policy_name, days, target=None):
 
 def set_policy_warm_phase(config, policy_name, days, target=None):
     """Add or update warm phase in an ILM policy."""
-    from .cli import get_server
+    from .cli import get_server, get_auth, get_verify_ssl, get_base_url
     
     server, _ = get_server(config, target)
-    base_url = f"{server['protocol']}://{server['host']}"
+    base_url = get_base_url(server)
+    auth = get_auth(server)
+    verify_ssl = get_verify_ssl(server)
     
     # Get current policy
-    policy_resp = requests.get(f"{base_url}/_ilm/policy/{policy_name}")
+    policy_resp = requests.get(f"{base_url}/_ilm/policy/{policy_name}", auth=auth, verify=verify_ssl)
     if policy_resp.status_code != 200:
         return {"error": f"Policy '{policy_name}' not found"}
     
@@ -109,7 +118,9 @@ def set_policy_warm_phase(config, policy_name, days, target=None):
     update_resp = requests.put(
         f"{base_url}/_ilm/policy/{policy_name}",
         headers={"Content-Type": "application/json"},
-        data=json.dumps({"policy": policy})
+        data=json.dumps({"policy": policy}),
+        auth=auth,
+        verify=verify_ssl
     )
     
     if update_resp.status_code in [200, 201]:
@@ -125,13 +136,15 @@ def set_policy_warm_phase(config, policy_name, days, target=None):
 
 def set_policy_cold_phase(config, policy_name, days, target=None):
     """Add or update cold phase in an ILM policy."""
-    from .cli import get_server
+    from .cli import get_server, get_auth, get_verify_ssl, get_base_url
     
     server, _ = get_server(config, target)
-    base_url = f"{server['protocol']}://{server['host']}"
+    base_url = get_base_url(server)
+    auth = get_auth(server)
+    verify_ssl = get_verify_ssl(server)
     
     # Get current policy
-    policy_resp = requests.get(f"{base_url}/_ilm/policy/{policy_name}")
+    policy_resp = requests.get(f"{base_url}/_ilm/policy/{policy_name}", auth=auth, verify=verify_ssl)
     if policy_resp.status_code != 200:
         return {"error": f"Policy '{policy_name}' not found"}
     
@@ -155,7 +168,9 @@ def set_policy_cold_phase(config, policy_name, days, target=None):
     update_resp = requests.put(
         f"{base_url}/_ilm/policy/{policy_name}",
         headers={"Content-Type": "application/json"},
-        data=json.dumps({"policy": policy})
+        data=json.dumps({"policy": policy}),
+        auth=auth,
+        verify=verify_ssl
     )
     
     if update_resp.status_code in [200, 201]:
@@ -171,13 +186,15 @@ def set_policy_cold_phase(config, policy_name, days, target=None):
 
 def set_policy_rollover(config, policy_name, max_size, max_docs, target=None):
     """Add or update rollover action in hot phase of an ILM policy."""
-    from .cli import get_server
+    from .cli import get_server, get_auth, get_verify_ssl, get_base_url
     
     server, _ = get_server(config, target)
-    base_url = f"{server['protocol']}://{server['host']}"
+    base_url = get_base_url(server)
+    auth = get_auth(server)
+    verify_ssl = get_verify_ssl(server)
     
     # Get current policy
-    policy_resp = requests.get(f"{base_url}/_ilm/policy/{policy_name}")
+    policy_resp = requests.get(f"{base_url}/_ilm/policy/{policy_name}", auth=auth, verify=verify_ssl)
     if policy_resp.status_code != 200:
         return {"error": f"Policy '{policy_name}' not found"}
     
@@ -220,13 +237,15 @@ def set_policy_rollover(config, policy_name, max_size, max_docs, target=None):
 
 def delete_index(config, index_name, target=None):
     """Delete an index."""
-    from .cli import get_server
+    from .cli import get_server, get_auth, get_verify_ssl, get_base_url
     
     server, _ = get_server(config, target)
-    base_url = f"{server['protocol']}://{server['host']}"
+    base_url = get_base_url(server)
+    auth = get_auth(server)
+    verify_ssl = get_verify_ssl(server)
     
     # Delete the index
-    delete_resp = requests.delete(f"{base_url}/{index_name}")
+    delete_resp = requests.delete(f"{base_url}/{index_name}", auth=auth, verify=verify_ssl)
     
     if delete_resp.status_code == 200:
         return {
@@ -241,14 +260,20 @@ def delete_index(config, index_name, target=None):
 
 
 def delete_index_pattern(config, pattern_id, target=None):
-    """Delete an index pattern from .kibana."""
-    from .cli import get_server
+    """Delete an index pattern from .kibana or Dashboards API."""
+    from .cli import get_server, get_auth, get_verify_ssl, get_base_url, use_dashboards_api
     
     server, _ = get_server(config, target)
-    base_url = f"{server['protocol']}://{server['host']}"
+    base_url = get_base_url(server)
+    auth = get_auth(server)
+    verify_ssl = get_verify_ssl(server)
     
-    # Delete the index pattern document
-    delete_resp = requests.delete(f"{base_url}/.kibana/_doc/index-pattern:{pattern_id}")
+    if use_dashboards_api(server):
+        # Use OpenSearch Dashboards API
+        delete_resp = requests.delete(f"{base_url}/api/saved_objects/index-pattern/{pattern_id}", auth=auth, verify=verify_ssl)
+    else:
+        # Use direct .kibana index access
+        delete_resp = requests.delete(f"{base_url}/.kibana/_doc/index-pattern:{pattern_id}", auth=auth, verify=verify_ssl)
     
     if delete_resp.status_code == 200:
         return {
@@ -263,53 +288,79 @@ def delete_index_pattern(config, pattern_id, target=None):
 
 
 def delete_dashboard(config, obj_id, target=None):
-    """Delete a dashboard or visualization from .kibana."""
-    from .cli import get_server
+    """Delete a dashboard or visualization from .kibana or Dashboards API."""
+    from .cli import get_server, get_auth, get_verify_ssl, get_base_url, use_dashboards_api
     
     server, _ = get_server(config, target)
-    base_url = f"{server['protocol']}://{server['host']}"
+    base_url = get_base_url(server)
+    auth = get_auth(server)
+    verify_ssl = get_verify_ssl(server)
     
-    # Delete the saved object document
-    delete_resp = requests.delete(f"{base_url}/.kibana/_doc/{obj_id}")
-    
-    if delete_resp.status_code == 200:
-        return {
-            "success": True,
-            "id": obj_id,
-            "message": f"Dashboard/visualization '{obj_id}' deleted successfully"
-        }
-    elif delete_resp.status_code == 404:
-        return {"error": f"Dashboard/visualization '{obj_id}' not found"}
+    if use_dashboards_api(server):
+        # Use OpenSearch Dashboards API - try both types
+        delete_resp = requests.delete(f"{base_url}/api/saved_objects/dashboard/{obj_id}", auth=auth, verify=verify_ssl)
+        if delete_resp.status_code == 200:
+            return {
+                "success": True,
+                "id": obj_id,
+                "message": f"Dashboard '{obj_id}' deleted successfully"
+            }
+        
+        delete_resp = requests.delete(f"{base_url}/api/saved_objects/visualization/{obj_id}", auth=auth, verify=verify_ssl)
+        if delete_resp.status_code == 200:
+            return {
+                "success": True,
+                "id": obj_id,
+                "message": f"Visualization '{obj_id}' deleted successfully"
+            }
+        elif delete_resp.status_code == 404:
+            return {"error": f"Dashboard/visualization '{obj_id}' not found"}
+        else:
+            return {"error": delete_resp.text}
     else:
-        return {"error": delete_resp.text}
+        # Use direct .kibana index access - try to find and delete
+        delete_resp = requests.delete(f"{base_url}/.kibana/_doc/{obj_id}", auth=auth, verify=verify_ssl)
+        
+        if delete_resp.status_code == 200:
+            return {
+                "success": True,
+                "id": obj_id,
+                "message": f"Dashboard/visualization '{obj_id}' deleted successfully"
+            }
+        elif delete_resp.status_code == 404:
+            return {"error": f"Dashboard/visualization '{obj_id}' not found"}
+        else:
+            return {"error": delete_resp.text}
 
 
 def get_index_lifecycle_info(config, target=None, show_all=False):
     """Get ILM info for all indices with their lifecycle timelines."""
-    from .cli import get_server
+    from .cli import get_server, get_auth, get_verify_ssl, get_base_url
     
     server, _ = get_server(config, target)
-    base_url = f"{server['protocol']}://{server['host']}"
+    base_url = get_base_url(server)
+    auth = get_auth(server)
+    verify_ssl = get_verify_ssl(server)
     
     # Detect if this is OpenSearch or Elasticsearch
-    cluster_resp = requests.get(f"{base_url}/")
+    cluster_resp = requests.get(f"{base_url}/", auth=auth, verify=verify_ssl)
     cluster_info = cluster_resp.json()
     is_opensearch = "opensearch" in cluster_info.get("version", {}).get("distribution", "").lower()
     
     if is_opensearch:
         # OpenSearch uses ISM (Index State Management)
-        indices_resp = requests.get(f"{base_url}/_plugins/_ism/explain/*")
-        policies_resp = requests.get(f"{base_url}/_plugins/_ism/policies")
+        indices_resp = requests.get(f"{base_url}/_plugins/_ism/explain/*", auth=auth, verify=verify_ssl)
+        policies_resp = requests.get(f"{base_url}/_plugins/_ism/policies", auth=auth, verify=verify_ssl)
     else:
         # Elasticsearch uses ILM
-        indices_resp = requests.get(f"{base_url}/*/_ilm/explain")
-        policies_resp = requests.get(f"{base_url}/_ilm/policy")
+        indices_resp = requests.get(f"{base_url}/*/_ilm/explain", auth=auth, verify=verify_ssl)
+        policies_resp = requests.get(f"{base_url}/_ilm/policy", auth=auth, verify=verify_ssl)
     
     indices_data = indices_resp.json()
     policies = policies_resp.json()
     
     # Get index stats for sizes
-    stats_resp = requests.get(f"{base_url}/*/_stats/store")
+    stats_resp = requests.get(f"{base_url}/*/_stats/store", auth=auth, verify=verify_ssl)
     stats_data = stats_resp.json()
     
     results = []
@@ -454,75 +505,131 @@ def print_table(results):
 
 
 def list_dashboards(config, target=None, obj_type=None):
-    """List dashboards and visualizations from OpenSearch Dashboards."""
-    from .cli import get_server
+    """List dashboards and visualizations from .kibana or Dashboards API."""
+    from .cli import get_server, get_auth, get_verify_ssl, get_base_url, use_dashboards_api
     
     server, _ = get_server(config, target)
-    base_url = f"{server['protocol']}://{server['host']}"
+    base_url = get_base_url(server)
+    auth = get_auth(server)
+    verify_ssl = get_verify_ssl(server)
     
-    # Query saved objects
-    resp = requests.get(f"{base_url}/.kibana/_search?size=1000")
-    if resp.status_code != 200:
-        return {"error": f"Failed to fetch saved objects: {resp.status_code}"}
-    
-    data = resp.json()
-    results = []
-    
-    for hit in data['hits']['hits']:
-        source = hit['_source']
-        hit_type = source.get('type', 'unknown')
+    if use_dashboards_api(server):
+        # Use OpenSearch Dashboards API
+        if obj_type:
+            url = f"{base_url}/api/saved_objects/_find?type={obj_type}&per_page=1000"
+        else:
+            url = f"{base_url}/api/saved_objects/_find?type=dashboard&type=visualization&per_page=1000"
         
-        # Filter by type if specified
-        if obj_type and hit_type != obj_type:
-            continue
+        resp = requests.get(url, auth=auth, verify=verify_ssl)
+        if resp.status_code != 200:
+            return {"error": f"Failed to fetch saved objects: {resp.status_code}"}
         
-        # Only show dashboards and visualizations
-        if hit_type not in ['dashboard', 'visualization']:
-            continue
+        data = resp.json()
+        results = []
         
-        obj_data = source.get(hit_type, {})
-        title = obj_data.get('title', 'N/A')
-        obj_id = hit['_id']
+        for obj in data.get('saved_objects', []):
+            obj_id = obj['id']
+            obj_type_val = obj['type']
+            attrs = obj.get('attributes', {})
+            title = attrs.get('title', 'N/A')
+            
+            results.append({
+                'type': obj_type_val,
+                'id': obj_id,
+                'title': title
+            })
+    else:
+        # Use direct .kibana index access
+        url = f"{base_url}/.kibana/_search?size=1000"
+        resp = requests.get(url, auth=auth, verify=verify_ssl)
+        if resp.status_code != 200:
+            return {"error": f"Failed to fetch saved objects: {resp.status_code}"}
         
-        results.append({
-            'type': hit_type,
-            'id': obj_id,
-            'title': title
-        })
+        data = resp.json()
+        results = []
+        
+        for hit in data['hits']['hits']:
+            source = hit['_source']
+            hit_type = source.get('type', 'unknown')
+            
+            if obj_type and hit_type != obj_type:
+                continue
+            
+            if hit_type not in ['dashboard', 'visualization']:
+                continue
+            
+            obj_data = source.get(hit_type, {})
+            title = obj_data.get('title', 'N/A')
+            obj_id = hit['_id']
+            # Remove type prefix if present
+            if ':' in obj_id:
+                obj_id = obj_id.split(':', 1)[1]
+            
+            results.append({
+                'type': hit_type,
+                'id': obj_id,
+                'title': title
+            })
     
     return results
 
 
 def list_index_patterns(config, target=None):
-    """List all index patterns from .kibana index."""
-    from .cli import get_server
+    """List all index patterns from .kibana index or Dashboards API."""
+    from .cli import get_server, get_auth, get_verify_ssl, get_base_url, use_dashboards_api
     
     server, _ = get_server(config, target)
-    base_url = f"{server['protocol']}://{server['host']}"
+    base_url = get_base_url(server)
+    auth = get_auth(server)
+    verify_ssl = get_verify_ssl(server)
     
-    resp = requests.get(f"{base_url}/.kibana/_search?size=1000")
-    if resp.status_code != 200:
-        return {"error": f"Failed to fetch saved objects: {resp.status_code}"}
-    
-    data = resp.json()
-    results = []
-    
-    for hit in data['hits']['hits']:
-        source = hit['_source']
-        hit_type = source.get('type', 'unknown')
+    if use_dashboards_api(server):
+        # Use OpenSearch Dashboards API
+        url = f"{base_url}/api/saved_objects/_find?type=index-pattern&per_page=1000"
+        resp = requests.get(url, auth=auth, verify=verify_ssl)
+        if resp.status_code != 200:
+            return {"error": f"Failed to fetch saved objects: {resp.status_code}"}
         
-        # Only show index-patterns
-        if hit_type != 'index-pattern':
-            continue
+        data = resp.json()
+        results = []
         
-        obj_data = source.get('index-pattern', {})
-        title = obj_data.get('title', 'N/A')
-        obj_id = hit['_id']
+        for obj in data.get('saved_objects', []):
+            pattern_id = obj['id']
+            attrs = obj.get('attributes', {})
+            title = attrs.get('title', 'N/A')
+            
+            results.append({
+                'id': pattern_id,
+                'title': title
+            })
+    else:
+        # Use direct .kibana index access (Elasticsearch/OpenSearch)
+        url = f"{base_url}/.kibana/_search?size=1000"
+        resp = requests.get(url, auth=auth, verify=verify_ssl)
+        if resp.status_code != 200:
+            return {"error": f"Failed to fetch saved objects: {resp.status_code}"}
         
-        results.append({
-            'id': obj_id,
-            'title': title
-        })
+        data = resp.json()
+        results = []
+        
+        for hit in data['hits']['hits']:
+            source = hit['_source']
+            hit_type = source.get('type', 'unknown')
+            
+            if hit_type != 'index-pattern':
+                continue
+            
+            obj_data = source.get('index-pattern', {})
+            title = obj_data.get('title', 'N/A')
+            obj_id = hit['_id']
+            # Remove type prefix if present
+            if ':' in obj_id:
+                obj_id = obj_id.split(':', 1)[1]
+            
+            results.append({
+                'id': obj_id,
+                'title': title
+            })
     
     return results
 
@@ -575,93 +682,142 @@ def print_index_patterns(results):
 
 def export_saved_objects(config, target=None, obj_ids=None, obj_type=None):
     """Export saved objects (dashboards/visualizations) to ndjson format with index-pattern mapping."""
-    from .cli import get_server
+    from .cli import get_server, get_auth, get_verify_ssl, get_base_url, use_dashboards_api
     
     server, _ = get_server(config, target)
-    base_url = f"{server['protocol']}://{server['host']}"
+    base_url = get_base_url(server)
+    auth = get_auth(server)
+    verify_ssl = get_verify_ssl(server)
     
-    # Query saved objects
-    resp = requests.get(f"{base_url}/.kibana/_search?size=1000")
-    if resp.status_code != 200:
-        return {"error": f"Failed to fetch saved objects: {resp.status_code}"}
-    
-    data = resp.json()
-    
-    # Build index-pattern mapping (ID -> title/name)
     index_pattern_map = {}
-    for hit in data['hits']['hits']:
-        source = hit['_source']
-        if source.get('type') == 'index-pattern':
-            full_id = hit['_id']
-            obj_id = full_id.split(':', 1)[1] if ':' in full_id else full_id
-            title = source.get('index-pattern', {}).get('title')
-            if title:
-                index_pattern_map[obj_id] = title
-    
     ndjson_lines = []
     
-    # Add index-pattern mapping as first line (metadata)
-    ndjson_lines.append(json.dumps({"_index_pattern_map": index_pattern_map}))
-    
-    for hit in data['hits']['hits']:
-        source = hit['_source']
-        hit_type = source.get('type', 'unknown')
-        full_id = hit['_id']
+    if use_dashboards_api(server):
+        # Use OpenSearch Dashboards API
+        ip_resp = requests.get(f"{base_url}/api/saved_objects/_find?type=index-pattern&per_page=1000", auth=auth, verify=verify_ssl)
+        if ip_resp.status_code != 200:
+            return {"error": f"Failed to fetch index patterns: {ip_resp.status_code}"}
         
-        # Extract ID (remove type prefix like "dashboard:")
-        obj_id = full_id.split(':', 1)[1] if ':' in full_id else full_id
+        ip_data = ip_resp.json()
         
-        # Filter by type if specified
-        if obj_type and hit_type != obj_type:
-            continue
+        for obj in ip_data.get('saved_objects', []):
+            obj_id = obj['id']
+            title = obj.get('attributes', {}).get('title')
+            if title:
+                index_pattern_map[obj_id] = title
         
-        # Filter by IDs if specified
-        if obj_ids and obj_id not in obj_ids:
-            continue
+        url = f"{base_url}/api/saved_objects/_find?type=dashboard&type=visualization&per_page=1000"
+        resp = requests.get(url, auth=auth, verify=verify_ssl)
+        if resp.status_code != 200:
+            return {"error": f"Failed to fetch saved objects: {resp.status_code}"}
         
-        # Only export dashboards and visualizations
-        if hit_type not in ['dashboard', 'visualization']:
-            continue
+        data = resp.json()
         
-        # Build export object in ndjson format
-        obj = {
-            'id': obj_id,
-            'type': hit_type,
-            'attributes': source[hit_type]
-        }
+        # Add index-pattern mapping as first line (metadata)
+        ndjson_lines.append(json.dumps({"_index_pattern_map": index_pattern_map}))
         
-        # Sanitize: remove filters and queries from searchSourceJSON
-        if 'kibanaSavedObjectMeta' in obj['attributes']:
-            meta = obj['attributes']['kibanaSavedObjectMeta']
-            if 'searchSourceJSON' in meta:
-                try:
-                    search_source = json.loads(meta['searchSourceJSON'])
-                    # Remove query and filter
-                    if 'query' in search_source:
-                        # Keep the structure but clear the query string
-                        if isinstance(search_source['query'], dict):
-                            search_source['query']['query'] = ''
-                    if 'filter' in search_source:
-                        search_source['filter'] = []
-                    meta['searchSourceJSON'] = json.dumps(search_source)
-                except:
-                    pass
+        for obj in data.get('saved_objects', []):
+            obj_id = obj['id']
+            hit_type = obj['type']
+            
+            if obj_type and hit_type != obj_type:
+                continue
+            if obj_ids and obj_id not in obj_ids:
+                continue
+            
+            export_obj = {
+                'id': obj_id,
+                'type': hit_type,
+                'attributes': obj.get('attributes', {})
+            }
+            
+            if 'kibanaSavedObjectMeta' in export_obj['attributes']:
+                meta = export_obj['attributes']['kibanaSavedObjectMeta']
+                if 'searchSourceJSON' in meta:
+                    try:
+                        search_source = json.loads(meta['searchSourceJSON'])
+                        if 'query' in search_source:
+                            if isinstance(search_source['query'], dict):
+                                search_source['query']['query'] = ''
+                        if 'filter' in search_source:
+                            search_source['filter'] = []
+                        meta['searchSourceJSON'] = json.dumps(search_source)
+                    except:
+                        pass
+            
+            if 'references' in obj:
+                export_obj['references'] = obj['references']
+            
+            ndjson_lines.append(json.dumps(export_obj))
+    else:
+        # Use direct .kibana index access
+        resp = requests.get(f"{base_url}/.kibana/_search?size=1000", auth=auth, verify=verify_ssl)
+        if resp.status_code != 200:
+            return {"error": f"Failed to fetch saved objects: {resp.status_code}"}
         
-        # Include references if present (preserves index-pattern IDs)
-        if 'references' in source:
-            obj['references'] = source['references']
+        data = resp.json()
         
-        ndjson_lines.append(json.dumps(obj))
+        for hit in data['hits']['hits']:
+            source = hit['_source']
+            if source.get('type') == 'index-pattern':
+                full_id = hit['_id']
+                obj_id = full_id.split(':', 1)[1] if ':' in full_id else full_id
+                title = source.get('index-pattern', {}).get('title')
+                if title:
+                    index_pattern_map[obj_id] = title
+        
+        ndjson_lines.append(json.dumps({"_index_pattern_map": index_pattern_map}))
+        
+        for hit in data['hits']['hits']:
+            source = hit['_source']
+            hit_type = source.get('type', 'unknown')
+            full_id = hit['_id']
+            
+            obj_id = full_id.split(':', 1)[1] if ':' in full_id else full_id
+            
+            if obj_type and hit_type != obj_type:
+                continue
+            if obj_ids and obj_id not in obj_ids:
+                continue
+            if hit_type not in ['dashboard', 'visualization']:
+                continue
+            
+            obj = {
+                'id': obj_id,
+                'type': hit_type,
+                'attributes': source[hit_type]
+            }
+            
+            if 'kibanaSavedObjectMeta' in obj['attributes']:
+                meta = obj['attributes']['kibanaSavedObjectMeta']
+                if 'searchSourceJSON' in meta:
+                    try:
+                        search_source = json.loads(meta['searchSourceJSON'])
+                        if 'query' in search_source:
+                            if isinstance(search_source['query'], dict):
+                                search_source['query']['query'] = ''
+                        if 'filter' in search_source:
+                            search_source['filter'] = []
+                        meta['searchSourceJSON'] = json.dumps(search_source)
+                    except:
+                        pass
+            
+            if 'references' in source:
+                obj['references'] = source['references']
+            
+            ndjson_lines.append(json.dumps(obj))
     
     return '\n'.join(ndjson_lines)
 
 
 def import_saved_objects(config, ndjson_content, target=None):
     """Import saved objects from ndjson directly to .kibana index."""
-    from .cli import get_server
+    from .cli import get_server, get_auth, get_verify_ssl, get_base_url
     
     server, _ = get_server(config, target)
-    base_url = f"{server['protocol']}://{server['host']}"
+    base_url = get_base_url(server)
+    auth = get_auth(server)
+    verify_ssl = get_verify_ssl(server)
     
     lines = ndjson_content.strip().split('\n')
     
@@ -690,7 +846,9 @@ def import_saved_objects(config, ndjson_content, target=None):
         import_resp = requests.put(
             f"{base_url}/.kibana/_doc/{obj['type']}:{obj['id']}",
             headers={"Content-Type": "application/json"},
-            json=doc
+            json=doc,
+            auth=auth,
+            verify=verify_ssl
         )
         
         imported.append({

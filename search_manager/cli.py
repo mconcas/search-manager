@@ -20,6 +20,37 @@ def get_server(config, target=None):
         raise ValueError(f"Server '{target}' not found in config")
     return servers[0], True  # default server, is_default=True
 
+def get_auth(server):
+    """Get auth tuple from server config if username/password are present."""
+    username = server.get("username")
+    password = server.get("password")
+    if username and password:
+        return (username, password)
+    return None
+
+def get_verify_ssl(server):
+    """Get SSL verification setting from server config (default True)."""
+    return server.get("verify_ssl", True)
+
+def get_base_url(server):
+    """Construct base URL from server config including optional base_path."""
+    protocol = server['protocol']
+    host = server['host']
+    base_path = server.get('base_path', '')
+    
+    if base_path:
+        # Ensure base_path starts with / and doesn't end with /
+        if not base_path.startswith('/'):
+            base_path = '/' + base_path
+        if base_path.endswith('/'):
+            base_path = base_path[:-1]
+        return f"{protocol}://{host}{base_path}"
+    return f"{protocol}://{host}"
+
+def use_dashboards_api(server):
+    """Check if we should use OpenSearch Dashboards API (true when base_path is set)."""
+    return bool(server.get('base_path'))
+
 def load_commands():
     commands_path = Path(__file__).parent / "commands.yaml"
     with open(commands_path) as f:
@@ -45,8 +76,11 @@ def query(endpoint, target=None):
     if is_default:
         print(f"→ {server['name']}")
     
-    url = f"{server['protocol']}://{server['host']}/{endpoint}"
-    response = requests.get(url)
+    base_url = get_base_url(server)
+    url = f"{base_url}/{endpoint}"
+    auth = get_auth(server)
+    verify_ssl = get_verify_ssl(server)
+    response = requests.get(url, auth=auth, verify=verify_ssl)
     try:
         print(json.dumps(response.json(), indent=2))
     except requests.exceptions.JSONDecodeError:
