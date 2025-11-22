@@ -11,4 +11,4 @@ dependencies = [
 ]
 
 [project.scripts]
-observe-cli = "search_manager.cli:main"
+observe-cli = "starsearch_observer.cli:main"
